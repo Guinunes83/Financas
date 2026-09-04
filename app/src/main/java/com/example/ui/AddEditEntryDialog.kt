@@ -6,6 +6,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,14 +38,53 @@ fun AddEditEntryDialog(
     var notes by remember { mutableStateOf(entry?.notes ?: "") }
     var recurrenceType by remember { mutableStateOf(entry?.recurrenceType ?: RecurrenceType.UNITARIO) }
     var installmentCountStr by remember { mutableStateOf(entry?.installmentCount?.toString() ?: "") }
-    var status by remember { mutableStateOf(entry?.status ?: EntryStatus.COMPLETED) }
+    var status by remember { mutableStateOf(entry?.status ?: EntryStatus.PENDING) }
     
     var categoryExpanded by remember { mutableStateOf(false) }
-
+    var showNewCategoryDialog by remember { mutableStateOf(false) }
+    var newCategoryName by remember { mutableStateOf("") }
+    
     var dateMillis by remember { mutableStateOf(entry?.dateMillis ?: System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
     
     val dateFormatter = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
+
+    if (showNewCategoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewCategoryDialog = false },
+            title = { Text("Nova Categoria") },
+            text = {
+                OutlinedTextField(
+                    value = newCategoryName,
+                    onValueChange = { newCategoryName = it },
+                    label = { Text("Nome da categoria") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newCategoryName.isNotBlank()) {
+                            onSaveCategory(newCategoryName.trim())
+                            category = newCategoryName.trim()
+                            showNewCategoryDialog = false
+                            newCategoryName = ""
+                        }
+                    },
+                    enabled = newCategoryName.isNotBlank()
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewCategoryDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dateMillis)
@@ -68,7 +108,12 @@ fun AddEditEntryDialog(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -115,6 +160,7 @@ fun AddEditEntryDialog(
                 onValueChange = { name = it },
                 label = { Text("Nome do Item") },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.fillMaxWidth()
             )
             
@@ -132,6 +178,7 @@ fun AddEditEntryDialog(
                         },
                         label = { Text("Categoria") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
                         colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                         modifier = Modifier.menuAnchor()
@@ -141,18 +188,12 @@ fun AddEditEntryDialog(
                         onDismissRequest = { categoryExpanded = false }
                     ) {
                         val filteredCategories = categories.filter { it.name.contains(category, ignoreCase = true) }
-                        if (filteredCategories.isEmpty() && category.isNotBlank()) {
+                        
+                        if (filteredCategories.isEmpty() && category.isEmpty()) {
                             DropdownMenuItem(
-                                text = { Text("Criar categoria '$category'") },
-                                onClick = { 
-                                    onSaveCategory(category.trim())
-                                    categoryExpanded = false 
-                                }
-                            )
-                        } else if (filteredCategories.isEmpty()) {
-                            DropdownMenuItem(
-                                text = { Text("Nenhuma categoria (Crie em Ajustes)") },
-                                onClick = { categoryExpanded = false }
+                                text = { Text("Nenhuma categoria (Crie uma nova)") },
+                                onClick = { categoryExpanded = false },
+                                enabled = false
                             )
                         } else {
                             filteredCategories.forEach { cat ->
@@ -165,13 +206,22 @@ fun AddEditEntryDialog(
                                 )
                             }
                         }
+                        
+                        Divider(modifier = Modifier.padding(horizontal = 8.dp))
+                        DropdownMenuItem(
+                            text = { Text("Criar nova categoria...", color = MaterialTheme.colorScheme.primary) },
+                            onClick = { 
+                                showNewCategoryDialog = true
+                                categoryExpanded = false 
+                            }
+                        )
                     }
                 }
-
                 OutlinedTextField(
                     value = amountString,
                     onValueChange = { amountString = it },
                     label = { Text("Valor Total") },
+                    placeholder = { Text("R$ 0,00") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.weight(1f)
@@ -233,6 +283,7 @@ fun AddEditEntryDialog(
                 onValueChange = { notes = it },
                 label = { Text("Observações (opcional)") },
                 modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 minLines = 2
             )
 

@@ -15,6 +15,9 @@ interface CategoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCategory(category: FinancialCategory)
 
+    @androidx.room.Update
+    suspend fun updateCategory(category: FinancialCategory)
+
     @Delete
     suspend fun deleteCategory(category: FinancialCategory)
 }

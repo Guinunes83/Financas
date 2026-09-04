@@ -7,12 +7,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.FinancialCategory
@@ -21,6 +24,46 @@ import com.example.data.FinancialCategory
 @Composable
 fun SettingsScreen(viewModel: FinancialViewModel, uiState: FinancialUiState) {
     var newCategoryName by remember { mutableStateOf("") }
+    
+    var categoryToEdit by remember { mutableStateOf<FinancialCategory?>(null) }
+    var editCategoryName by remember { mutableStateOf("") }
+
+    if (categoryToEdit != null) {
+        AlertDialog(
+            onDismissRequest = { categoryToEdit = null },
+            title = { Text("Editar Categoria") },
+            text = {
+                OutlinedTextField(
+                    value = editCategoryName,
+                    onValueChange = { editCategoryName = it },
+                    label = { Text("Nome da Categoria") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (editCategoryName.isNotBlank() && categoryToEdit != null) {
+                            val oldName = categoryToEdit!!.name
+                            val updatedCategory = categoryToEdit!!.copy(name = editCategoryName.trim())
+                            viewModel.updateCategoryName(updatedCategory, oldName)
+                            categoryToEdit = null
+                        }
+                    },
+                    enabled = editCategoryName.isNotBlank()
+                ) {
+                    Text("Salvar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { categoryToEdit = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
     
     Column(
         modifier = Modifier
@@ -100,14 +143,27 @@ fun SettingsScreen(viewModel: FinancialViewModel, uiState: FinancialUiState) {
                                 Text(
                                     text = category.name,
                                     fontSize = 16.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f)
                                 )
-                                IconButton(onClick = { viewModel.deleteCategory(category) }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Excluir Categoria",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
+                                Row {
+                                    IconButton(onClick = { 
+                                        categoryToEdit = category
+                                        editCategoryName = category.name
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Editar Categoria",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    IconButton(onClick = { viewModel.deleteCategory(category) }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Excluir Categoria",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
                                 }
                             }
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))

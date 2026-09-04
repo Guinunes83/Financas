@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,7 +53,9 @@ fun FinancialScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showAddDialog by remember { mutableStateOf(false) }
     var entryToEdit by remember { mutableStateOf<FinancialEntry?>(null) }
+    var entryToDelete by remember { mutableStateOf<FinancialEntry?>(null) }
     var currentTab by remember { mutableStateOf("Principal") }
+    var searchQuery by remember { mutableStateOf("") }
 
     Scaffold(
         modifier = modifier,
@@ -125,12 +129,25 @@ fun FinancialScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Pesquisar por nome ou categoria") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Pesquisar") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 8.dp),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
                         .padding(horizontal = 16.dp)
-                        .padding(top = 16.dp)
+                        .padding(top = 8.dp)
                         .background(
                             color = Color.White,
                             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
@@ -143,37 +160,70 @@ fun FinancialScreen(
                         .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                 ) {
                     SpreadsheetHeader()
+                    
+                    val filteredEntries = if (searchQuery.isNotBlank()) {
+                        uiState.entries.filter { 
+                            it.name.contains(searchQuery, ignoreCase = true) || 
+                            it.category.contains(searchQuery, ignoreCase = true) 
+                        }
+                    } else {
+                        uiState.entries
+                    }
 
-                    if (uiState.entries.isEmpty()) {
+                    if (filteredEntries.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Nenhum lançamento. Adicione um clicando no botão +", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Nenhum lançamento encontrado.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     } else {
                         val monthFormatter = remember { SimpleDateFormat("MMMM yyyy", Locale("pt", "BR")) }
-                        val groupedEntries = uiState.entries
-                            .sortedByDescending { it.dateMillis }
+                        val currentMonthString = remember { monthFormatter.format(Date()).replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString() } }
+                        
+                        val groupedEntries = filteredEntries
+                            .sortedBy { it.dateMillis }
                             .groupBy { 
                                 monthFormatter.format(Date(it.dateMillis)).replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString() } 
                             }
                         
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        val listState = rememberLazyListState()
+                        
+                        LaunchedEffect(groupedEntries) {
+                            var targetIndex = -1
+                            var currentIndex = 0
+                            for ((monthString, entriesForMonth) in groupedEntries) {
+                                if (monthString == currentMonthString) {
+                                    targetIndex = currentIndex
+                                    break
+                                }
+                                currentIndex += 1 + entriesForMonth.size + 1
+                            }
+                            if (targetIndex != -1) {
+                                listState.scrollToItem(targetIndex)
+                            }
+                        }
+
+                        LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
                             groupedEntries.forEach { (monthString, entriesForMonth) ->
                                 item(key = "header_$monthString") {
                                     MonthSeparator(monthString)
                                 }
-                                items(entriesForMonth, key = { it.id }) { entry ->
+                                items(entriesForMonth.sortedBy { it.dateMillis }, key = { it.id }) { entry ->
                                     SpreadsheetRow(
                                         entry = entry,
                                         onEdit = { entryToEdit = it; showAddDialog = true },
-                                        onDelete = { viewModel.deleteEntry(it) },
+                                        onDelete = { entryToDelete = it },
                                         onStatusChange = { viewModel.updateEntry(it) }
                                     )
                                 }
                                 item(key = "footer_$monthString") {
                                     val monthIncome = entriesForMonth.filter { it.type == EntryType.INCOME }.sumOf { it.amount }
-                                    val monthExpense = entriesForMonth.filter { it.type == EntryType.EXPENSE }.sumOf { it.amount }
-                                    val monthBalance = monthIncome - monthExpense
-                                    MonthTotalRow(monthBalance)
+                                    val monthExpenseCompleted = entriesForMonth.filter { it.type == EntryType.EXPENSE && it.status == com.example.data.EntryStatus.COMPLETED }.sumOf { it.amount }
+                                    val monthExpensePending = entriesForMonth.filter { it.type == EntryType.EXPENSE && it.status == com.example.data.EntryStatus.PENDING }.sumOf { it.amount }
+                                    
+                                    MonthSummary(
+                                        totalIncome = monthIncome,
+                                        totalExpense = monthExpenseCompleted,
+                                        totalScheduled = monthExpensePending
+                                    )
                                 }
                             }
                         }
@@ -209,6 +259,53 @@ fun FinancialScreen(
                 viewModel.insertCategory(com.example.data.FinancialCategory(name = categoryName))
             }
         )
+    }
+
+    entryToDelete?.let { entry ->
+        if (entry.recurrenceType != com.example.data.RecurrenceType.UNITARIO && entry.recurrenceId != null) {
+            AlertDialog(
+                onDismissRequest = { entryToDelete = null },
+                title = { Text("Excluir Lançamento Recorrente") },
+                text = { Text("Este é um lançamento parcelado ou recorrente. Deseja excluir apenas esta parcela ou todas as seguintes a partir desta data?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.deleteEntry(entry)
+                        entryToDelete = null
+                    }) {
+                        Text("Apenas este")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        viewModel.deleteFutureEntries(entry)
+                        entryToDelete = null
+                    }) {
+                        Text("Este e os próximos")
+                    }
+                },
+                containerColor = Color.White
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { entryToDelete = null },
+                title = { Text("Excluir Lançamento") },
+                text = { Text("Tem certeza que deseja excluir este lançamento?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.deleteEntry(entry)
+                        entryToDelete = null
+                    }) {
+                        Text("Excluir")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { entryToDelete = null }) {
+                        Text("Cancelar")
+                    }
+                },
+                containerColor = Color.White
+            )
+        }
     }
 }
 
@@ -246,6 +343,9 @@ fun SpreadsheetRow(
     
     val pillBgColor = if (entry.type == EntryType.INCOME) GeometricIncomeBg else GeometricExpenseBg
     val pillTextColor = if (entry.type == EntryType.INCOME) GeometricIncomeText else GeometricExpenseText
+
+    val categoryHue = (kotlin.math.abs(entry.category.hashCode()) % 360).toFloat()
+    val categoryColor = Color(android.graphics.Color.HSVToColor(floatArrayOf(categoryHue, 0.8f, 0.45f)))
 
     val isCompletedRow = entry.status == com.example.data.EntryStatus.COMPLETED
     val rowBackgroundColor = when {
@@ -291,10 +391,7 @@ fun SpreadsheetRow(
                 Text(
                     text = entry.category,
                     fontSize = 10.sp,
-                    color = pillTextColor,
-                    modifier = Modifier
-                        .background(pillBgColor, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    color = categoryColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -479,35 +576,80 @@ fun MonthSeparator(month: String) {
         Spacer(modifier = Modifier.width(8.dp))
         HorizontalDivider(
             modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+            color = MaterialTheme.colorScheme.primary,
+            thickness = 1.dp
         )
     }
 }
 
 @Composable
-fun MonthTotalRow(balance: Double) {
-    val isPositive = balance >= 0
-    val color = if (isPositive) GeometricIncome else GeometricExpense
-    
-    Row(
+fun MonthSummary(totalIncome: Double, totalExpense: Double, totalScheduled: Double) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .background(
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text(
-            text = "SALDO LÍQUIDO DO MÊS",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = formatCurrency(balance),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = color
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "TOTAL DE GASTOS MÊS",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = formatCurrency(totalExpense),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = GeometricExpense
+            )
+        }
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "TOTAL DE GANHOS MÊS",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = formatCurrency(totalIncome),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = GeometricIncome
+            )
+        }
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "TOTAL PROGRAMADO MÊS",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = formatCurrency(totalScheduled),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+        }
     }
 }

@@ -19,6 +19,12 @@ interface FinancialEntryDao {
     @Update
     suspend fun updateEntry(entry: FinancialEntry)
 
+    @Query("UPDATE financial_entries SET category = :newName WHERE category = :oldName")
+    suspend fun updateEntriesCategoryName(oldName: String, newName: String)
+
     @Delete
     suspend fun deleteEntry(entry: FinancialEntry)
+
+    @Query("DELETE FROM financial_entries WHERE recurrenceId = :recurrenceId AND dateMillis >= :dateMillis")
+    suspend fun deleteFutureEntries(recurrenceId: String, dateMillis: Long)
 }

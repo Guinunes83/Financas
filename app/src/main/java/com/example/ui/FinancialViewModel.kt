@@ -72,7 +72,7 @@ class FinancialViewModel(private val repository: FinancialRepository) : ViewMode
         repository.allEntries,
         repository.allCategories
     ) { entries, categories ->
-        val income = entries.filter { it.type == EntryType.INCOME && it.status == EntryStatus.COMPLETED }.sumOf { it.amount }
+        val income = entries.filter { it.type == EntryType.INCOME }.sumOf { it.amount }
         val expense = entries.filter { it.type == EntryType.EXPENSE && it.status == EntryStatus.COMPLETED }.sumOf { it.amount }
         
         val scheduledIncome = entries.filter { it.type == EntryType.INCOME && it.status == EntryStatus.PENDING }.sumOf { it.amount }
@@ -140,8 +140,20 @@ class FinancialViewModel(private val repository: FinancialRepository) : ViewMode
         repository.delete(entry)
     }
     
+    fun deleteFutureEntries(entry: FinancialEntry) = viewModelScope.launch {
+        if (entry.recurrenceId != null) {
+            repository.deleteFutureEntries(entry.recurrenceId, entry.dateMillis)
+        } else {
+            repository.delete(entry)
+        }
+    }
+    
     fun insertCategory(category: FinancialCategory) = viewModelScope.launch {
         repository.insertCategory(category)
+    }
+    
+    fun updateCategoryName(category: FinancialCategory, oldName: String) = viewModelScope.launch {
+        repository.updateCategoryName(category, oldName)
     }
     
     fun deleteCategory(category: FinancialCategory) = viewModelScope.launch {
