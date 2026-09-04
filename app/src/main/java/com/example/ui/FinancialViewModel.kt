@@ -12,22 +12,79 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import com.example.data.FinancialCategory
+import kotlinx.coroutines.flow.combine
+
+import com.example.data.EntryStatus
+
+import kotlinx.coroutines.flow.first
+
 data class FinancialUiState(
     val entries: List<FinancialEntry> = emptyList(),
+    val categories: List<FinancialCategory> = emptyList(),
     val totalIncome: Double = 0.0,
     val totalExpense: Double = 0.0,
+    val scheduledIncome: Double = 0.0,
+    val scheduledExpense: Double = 0.0,
     val balance: Double = 0.0
 )
 
 class FinancialViewModel(private val repository: FinancialRepository) : ViewModel() {
 
-    val uiState: StateFlow<FinancialUiState> = repository.allEntries.map { entries ->
-        val income = entries.filter { it.type == EntryType.INCOME }.sumOf { it.amount }
-        val expense = entries.filter { it.type == EntryType.EXPENSE }.sumOf { it.amount }
+    init {
+        viewModelScope.launch {
+            try {
+                val entries = repository.allEntries.first()
+                val calendar = java.util.Calendar.getInstance()
+                calendar.add(java.util.Calendar.MONTH, 11)
+                val maxDateLimit = calendar.timeInMillis
+                
+                val recurringGroups = entries.filter { it.recurrenceType == com.example.data.RecurrenceType.RECORRENTE && it.recurrenceId != null }
+                    .groupBy { it.recurrenceId!! }
+                    
+                recurringGroups.forEach { (recurrenceId, groupEntries) ->
+                    val latestEntry = groupEntries.maxByOrNull { it.dateMillis }
+                    if (latestEntry != null) {
+                        val latestCal = java.util.Calendar.getInstance().apply { timeInMillis = latestEntry.dateMillis }
+                        
+                        while (true) {
+                            latestCal.add(java.util.Calendar.MONTH, 1)
+                            if (latestCal.timeInMillis <= maxDateLimit) {
+                                val newEntry = latestEntry.copy(
+                                    id = 0,
+                                    dateMillis = latestCal.timeInMillis,
+                                    status = com.example.data.EntryStatus.PENDING
+                                )
+                                repository.insert(newEntry)
+                            } else {
+                                break
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    val uiState: StateFlow<FinancialUiState> = combine(
+        repository.allEntries,
+        repository.allCategories
+    ) { entries, categories ->
+        val income = entries.filter { it.type == EntryType.INCOME && it.status == EntryStatus.COMPLETED }.sumOf { it.amount }
+        val expense = entries.filter { it.type == EntryType.EXPENSE && it.status == EntryStatus.COMPLETED }.sumOf { it.amount }
+        
+        val scheduledIncome = entries.filter { it.type == EntryType.INCOME && it.status == EntryStatus.PENDING }.sumOf { it.amount }
+        val scheduledExpense = entries.filter { it.type == EntryType.EXPENSE && it.status == EntryStatus.PENDING }.sumOf { it.amount }
+        
         FinancialUiState(
             entries = entries,
+            categories = categories,
             totalIncome = income,
             totalExpense = expense,
+            scheduledIncome = scheduledIncome,
+            scheduledExpense = scheduledExpense,
             balance = income - expense
         )
     }.stateIn(
@@ -37,15 +94,58 @@ class FinancialViewModel(private val repository: FinancialRepository) : ViewMode
     )
 
     fun insertEntry(entry: FinancialEntry) = viewModelScope.launch {
-        repository.insert(entry)
+        if (entry.recurrenceType == com.example.data.RecurrenceType.RECORRENTE) {
+            val recurrenceId = entry.recurrenceId ?: java.util.UUID.randomUUID().toString()
+            val baseDate = java.util.Calendar.getInstance().apply { timeInMillis = entry.dateMillis }
+            for (i in 0..11) {
+                val nextDate = baseDate.clone() as java.util.Calendar
+                nextDate.add(java.util.Calendar.MONTH, i)
+                val newEntry = entry.copy(
+                    id = 0,
+                    dateMillis = nextDate.timeInMillis,
+                    recurrenceId = recurrenceId,
+                    status = if (i == 0) entry.status else com.example.data.EntryStatus.PENDING
+                )
+                repository.insert(newEntry)
+            }
+        } else {
+            repository.insert(entry)
+        }
     }
 
     fun updateEntry(entry: FinancialEntry) = viewModelScope.launch {
-        repository.update(entry)
+        if (entry.recurrenceType == com.example.data.RecurrenceType.RECORRENTE && entry.recurrenceId == null) {
+            val recurrenceId = java.util.UUID.randomUUID().toString()
+            val entryWithId = entry.copy(recurrenceId = recurrenceId)
+            repository.update(entryWithId)
+            
+            val baseDate = java.util.Calendar.getInstance().apply { timeInMillis = entry.dateMillis }
+            for (i in 1..11) {
+                val nextDate = baseDate.clone() as java.util.Calendar
+                nextDate.add(java.util.Calendar.MONTH, i)
+                val newEntry = entry.copy(
+                    id = 0,
+                    dateMillis = nextDate.timeInMillis,
+                    recurrenceId = recurrenceId,
+                    status = com.example.data.EntryStatus.PENDING
+                )
+                repository.insert(newEntry)
+            }
+        } else {
+            repository.update(entry)
+        }
     }
 
     fun deleteEntry(entry: FinancialEntry) = viewModelScope.launch {
         repository.delete(entry)
+    }
+    
+    fun insertCategory(category: FinancialCategory) = viewModelScope.launch {
+        repository.insertCategory(category)
+    }
+    
+    fun deleteCategory(category: FinancialCategory) = viewModelScope.launch {
+        repository.deleteCategory(category)
     }
 }
 

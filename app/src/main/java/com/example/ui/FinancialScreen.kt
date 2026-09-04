@@ -51,6 +51,7 @@ fun FinancialScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showAddDialog by remember { mutableStateOf(false) }
     var entryToEdit by remember { mutableStateOf<FinancialEntry?>(null) }
+    var currentTab by remember { mutableStateOf("Principal") }
 
     Scaffold(
         modifier = modifier,
@@ -94,8 +95,8 @@ fun FinancialScreen(
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    BottomNavButton(icon = Icons.Default.List, label = "Principal", selected = true)
-                    BottomNavButton(icon = Icons.Default.TrendingUp, label = "Relatórios", selected = false)
+                    BottomNavButton(icon = Icons.Default.List, label = "Principal", selected = currentTab == "Principal") { currentTab = "Principal" }
+                    BottomNavButton(icon = Icons.Default.TrendingUp, label = "Relatórios", selected = currentTab == "Relatórios") { currentTab = "Relatórios" }
                     
                     FloatingActionButton(
                         onClick = { showAddDialog = true },
@@ -112,53 +113,80 @@ fun FinancialScreen(
                         )
                     }
 
-                    BottomNavButton(icon = Icons.Default.Savings, label = "Planos", selected = false)
-                    BottomNavButton(icon = Icons.Default.Settings, label = "Ajustes", selected = false)
+                    BottomNavButton(icon = Icons.Default.Savings, label = "Planos", selected = currentTab == "Planos") { currentTab = "Planos" }
+                    BottomNavButton(icon = Icons.Default.Settings, label = "Ajustes", selected = currentTab == "Ajustes") { currentTab = "Ajustes" }
                 }
             }
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            DashboardHeader(uiState)
-            
+        if (currentTab == "Principal") {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 16.dp)
-                    .background(
-                        color = Color.White,
-                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-                    )
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .fillMaxSize()
+                    .padding(innerPadding)
             ) {
-                SpreadsheetHeader()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 16.dp)
+                        .padding(top = 16.dp)
+                        .background(
+                            color = Color.White,
+                            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                        )
+                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                ) {
+                    SpreadsheetHeader()
 
-                if (uiState.entries.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Nenhum lançamento. Adicione um clicando no botão +", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(uiState.entries, key = { it.id }) { entry ->
-                            SpreadsheetRow(
-                                entry = entry,
-                                onEdit = { entryToEdit = it; showAddDialog = true },
-                                onDelete = { viewModel.deleteEntry(it) }
-                            )
+                    if (uiState.entries.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Nenhum lançamento. Adicione um clicando no botão +", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        val monthFormatter = remember { SimpleDateFormat("MMMM yyyy", Locale("pt", "BR")) }
+                        val groupedEntries = uiState.entries
+                            .sortedByDescending { it.dateMillis }
+                            .groupBy { 
+                                monthFormatter.format(Date(it.dateMillis)).replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString() } 
+                            }
+                        
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            groupedEntries.forEach { (monthString, entriesForMonth) ->
+                                item(key = "header_$monthString") {
+                                    MonthSeparator(monthString)
+                                }
+                                items(entriesForMonth, key = { it.id }) { entry ->
+                                    SpreadsheetRow(
+                                        entry = entry,
+                                        onEdit = { entryToEdit = it; showAddDialog = true },
+                                        onDelete = { viewModel.deleteEntry(it) },
+                                        onStatusChange = { viewModel.updateEntry(it) }
+                                    )
+                                }
+                                item(key = "footer_$monthString") {
+                                    val monthIncome = entriesForMonth.filter { it.type == EntryType.INCOME }.sumOf { it.amount }
+                                    val monthExpense = entriesForMonth.filter { it.type == EntryType.EXPENSE }.sumOf { it.amount }
+                                    val monthBalance = monthIncome - monthExpense
+                                    MonthTotalRow(monthBalance)
+                                }
+                            }
                         }
                     }
                 }
+            }
+        } else if (currentTab == "Ajustes") {
+            Box(modifier = Modifier.padding(innerPadding)) {
+                SettingsScreen(viewModel, uiState)
+            }
+        } else {
+            Box(modifier = Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
+                Text("Em breve: $currentTab", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -166,6 +194,7 @@ fun FinancialScreen(
     if (showAddDialog) {
         AddEditEntryDialog(
             entry = entryToEdit,
+            categories = uiState.categories,
             onDismiss = {
                 showAddDialog = false
                 entryToEdit = null
@@ -175,94 +204,14 @@ fun FinancialScreen(
                 else viewModel.updateEntry(entry)
                 showAddDialog = false
                 entryToEdit = null
+            },
+            onSaveCategory = { categoryName ->
+                viewModel.insertCategory(com.example.data.FinancialCategory(name = categoryName))
             }
         )
     }
 }
 
-@Composable
-fun DashboardHeader(uiState: FinancialUiState) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "SALDO LÍQUIDO",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                letterSpacing = 2.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = formatCurrency(uiState.balance),
-                fontSize = 36.sp,
-                fontWeight = FontWeight.Light,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "GANHOS",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "+ ${formatCurrency(uiState.totalIncome)}",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = GeometricIncome
-                    )
-                }
-                
-                Box(modifier = Modifier.width(1.dp).height(40.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)))
-                
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "GASTOS",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "- ${formatCurrency(uiState.totalExpense)}",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = GeometricExpense
-                    )
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun SpreadsheetHeader() {
@@ -282,11 +231,13 @@ fun SpreadsheetHeader() {
     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SpreadsheetRow(
     entry: FinancialEntry,
     onEdit: (FinancialEntry) -> Unit,
-    onDelete: (FinancialEntry) -> Unit
+    onDelete: (FinancialEntry) -> Unit,
+    onStatusChange: (FinancialEntry) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val formatter = SimpleDateFormat("dd/MM", Locale.getDefault())
@@ -296,11 +247,18 @@ fun SpreadsheetRow(
     val pillBgColor = if (entry.type == EntryType.INCOME) GeometricIncomeBg else GeometricExpenseBg
     val pillTextColor = if (entry.type == EntryType.INCOME) GeometricIncomeText else GeometricExpenseText
 
+    val isCompletedRow = entry.status == com.example.data.EntryStatus.COMPLETED
+    val rowBackgroundColor = when {
+        expanded -> GeometricSurfaceVariantExpanded
+        isCompletedRow -> GeometricIncome.copy(alpha = 0.08f)
+        else -> Color.Transparent
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = !expanded }
-            .background(if (expanded) GeometricSurfaceVariantExpanded else Color.Transparent)
+            .background(rowBackgroundColor)
             .testTag("entry_row_${entry.id}")
     ) {
         Row(
@@ -372,6 +330,51 @@ fun SpreadsheetRow(
                         verticalAlignment = Alignment.Top
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+                                Text(
+                                    text = "RECORRÊNCIA:",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = entry.recurrenceType.displayName + if (entry.recurrenceType == com.example.data.RecurrenceType.PARCELADO) " (${entry.installmentCount}x)" else "",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+                                Text(
+                                    text = "STATUS:",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                
+                                val isCompleted = entry.status == com.example.data.EntryStatus.COMPLETED
+                                val completedText = if (entry.type == EntryType.INCOME) "Recebido" else "Pago"
+                                
+                                FilterChip(
+                                    selected = !isCompleted,
+                                    onClick = { onStatusChange(entry.copy(status = com.example.data.EntryStatus.PENDING)) },
+                                    label = { Text("Pendente", fontSize = 10.sp) },
+                                    modifier = Modifier.height(24.dp)
+                                )
+                                
+                                Spacer(Modifier.width(8.dp))
+                                
+                                FilterChip(
+                                    selected = isCompleted,
+                                    onClick = { onStatusChange(entry.copy(status = com.example.data.EntryStatus.COMPLETED)) },
+                                    label = { Text(completedText, fontSize = 10.sp) },
+                                    modifier = Modifier.height(24.dp)
+                                )
+                            }
+                            
                             Text(
                                 text = "OBSERVAÇÕES",
                                 fontSize = 9.sp,
@@ -433,13 +436,13 @@ fun formatCurrency(amount: Double): String {
 }
 
 @Composable
-fun BottomNavButton(icon: ImageVector, label: String, selected: Boolean) {
+fun BottomNavButton(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
     val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
     val bgColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(4.dp)
+        modifier = Modifier.clickable(onClick = onClick).padding(4.dp)
     ) {
         Box(
             modifier = Modifier
@@ -455,6 +458,56 @@ fun BottomNavButton(icon: ImageVector, label: String, selected: Boolean) {
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             color = color,
             modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+@Composable
+fun MonthSeparator(month: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp, horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = month,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        )
+    }
+}
+
+@Composable
+fun MonthTotalRow(balance: Double) {
+    val isPositive = balance >= 0
+    val color = if (isPositive) GeometricIncome else GeometricExpense
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "SALDO LÍQUIDO DO MÊS",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = formatCurrency(balance),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = color
         )
     }
 }
