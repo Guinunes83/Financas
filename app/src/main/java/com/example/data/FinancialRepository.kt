@@ -16,6 +16,22 @@ class FinancialRepository(
     suspend fun delete(entry: FinancialEntry) = entryDao.deleteEntry(entry)
     suspend fun deleteFutureEntries(recurrenceId: String, dateMillis: Long) = entryDao.deleteFutureEntries(recurrenceId, dateMillis)
 
+    suspend fun updateFutureEntries(entry: FinancialEntry) {
+        if (entry.recurrenceId != null) {
+            entryDao.updateFutureEntries(
+                recurrenceId = entry.recurrenceId,
+                dateMillis = entry.dateMillis,
+                type = entry.type,
+                name = entry.name,
+                category = entry.category,
+                amount = entry.amount,
+                notes = entry.notes,
+                planId = entry.planId
+            )
+        }
+    }
+
+
     suspend fun insertCategory(category: FinancialCategory) = categoryDao.insertCategory(category)
     
     suspend fun updateCategoryName(category: FinancialCategory, oldName: String) {

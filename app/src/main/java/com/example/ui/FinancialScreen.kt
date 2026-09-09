@@ -54,6 +54,7 @@ fun FinancialScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var entryToEdit by remember { mutableStateOf<FinancialEntry?>(null) }
     var entryToDelete by remember { mutableStateOf<FinancialEntry?>(null) }
+    var entryPendingUpdate by remember { mutableStateOf<FinancialEntry?>(null) }
     var currentTab by remember { mutableStateOf("Principal") }
     var searchQuery by remember { mutableStateOf("") }
 
@@ -265,14 +266,57 @@ fun FinancialScreen(
                 entryToEdit = null
             },
             onSave = { entry ->
-                if (entry.id == 0) viewModel.insertEntry(entry)
-                else viewModel.updateEntry(entry)
-                showAddDialog = false
-                entryToEdit = null
+                if (entry.id == 0) {
+                    viewModel.insertEntry(entry)
+                    showAddDialog = false
+                    entryToEdit = null
+                } else {
+                    if (entry.recurrenceType == com.example.data.RecurrenceType.RECORRENTE && entry.recurrenceId != null) {
+                        entryPendingUpdate = entry
+                    } else {
+                        viewModel.updateEntry(entry)
+                        showAddDialog = false
+                        entryToEdit = null
+                    }
+                }
             },
             onSaveCategory = { categoryName ->
                 viewModel.insertCategory(com.example.data.FinancialCategory(name = categoryName))
             }
+        )
+    }
+
+
+    if (entryPendingUpdate != null) {
+        AlertDialog(
+            onDismissRequest = { entryPendingUpdate = null },
+            title = { Text("Editar Lançamento Recorrente") },
+            text = { Text("Deseja aplicar esta alteração apenas a este lançamento ou a este e a todos os próximos lançamentos recorrentes?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.updateFutureEntries(entryPendingUpdate!!)
+                        entryPendingUpdate = null
+                        showAddDialog = false
+                        entryToEdit = null
+                    }
+                ) {
+                    Text("Este e os próximos")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.updateEntry(entryPendingUpdate!!)
+                        entryPendingUpdate = null
+                        showAddDialog = false
+                        entryToEdit = null
+                    }
+                ) {
+                    Text("Apenas este")
+                }
+            },
+            containerColor = Color.White
         )
     }
 

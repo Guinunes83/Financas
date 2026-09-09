@@ -27,4 +27,8 @@ interface FinancialEntryDao {
 
     @Query("DELETE FROM financial_entries WHERE recurrenceId = :recurrenceId AND dateMillis >= :dateMillis")
     suspend fun deleteFutureEntries(recurrenceId: String, dateMillis: Long)
+
+    @Query("UPDATE financial_entries SET type = :type, name = :name, category = :category, amount = :amount, notes = :notes, planId = :planId WHERE recurrenceId = :recurrenceId AND dateMillis > :dateMillis")
+    suspend fun updateFutureEntries(recurrenceId: String, dateMillis: Long, type: EntryType, name: String, category: String, amount: Double, notes: String, planId: Int?)
+
 }

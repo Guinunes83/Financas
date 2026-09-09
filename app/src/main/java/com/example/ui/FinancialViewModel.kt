@@ -119,6 +119,11 @@ class FinancialViewModel(private val repository: FinancialRepository) : ViewMode
         }
     }
 
+        fun updateFutureEntries(entry: FinancialEntry) = viewModelScope.launch {
+        repository.update(entry)
+        repository.updateFutureEntries(entry)
+    }
+
     fun updateEntry(entry: FinancialEntry) = viewModelScope.launch {
         if (entry.recurrenceType == com.example.data.RecurrenceType.RECORRENTE && entry.recurrenceId == null) {
             val recurrenceId = java.util.UUID.randomUUID().toString()

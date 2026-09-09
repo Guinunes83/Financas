@@ -3,33 +3,46 @@ import re
 with open('app/src/main/java/com/example/ui/FinancialScreen.kt', 'r') as f:
     content = f.read()
 
-# Replace Reports placeholder
-old_reports = """        } else if (currentTab == "Relatórios") {
-            Box(modifier = Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
-                Text("Em breve: $currentTab", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }"""
+dialog_code = """
+    if (entryPendingUpdate != null) {
+        AlertDialog(
+            onDismissRequest = { entryPendingUpdate = null },
+            title = { Text("Editar Lançamento Recorrente") },
+            text = { Text("Deseja aplicar esta alteração apenas a este lançamento ou a este e a todos os próximos lançamentos recorrentes?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.updateFutureEntries(entryPendingUpdate!!)
+                        entryPendingUpdate = null
+                        showAddDialog = false
+                        entryToEdit = null
+                    }
+                ) {
+                    Text("Este e os próximos")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.updateEntry(entryPendingUpdate!!)
+                        entryPendingUpdate = null
+                        showAddDialog = false
+                        entryToEdit = null
+                    }
+                ) {
+                    Text("Apenas este")
+                }
+            },
+            containerColor = Color.White
+        )
+    }
+"""
 
-new_reports = """        } else if (currentTab == "Relatórios") {
-            Box(modifier = Modifier.padding(innerPadding)) {
-                ReportsScreen(uiState)
-            }"""
-
-content = content.replace(old_reports, new_reports)
-
-# Replace Plans placeholder
-old_plans = """        } else if (currentTab == "Planos") {
-            Box(modifier = Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
-                Text("Em breve: $currentTab", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }"""
-
-new_plans = """        } else if (currentTab == "Planos") {
-            Box(modifier = Modifier.padding(innerPadding)) {
-                PlansScreen(viewModel, uiState)
-            }"""
-
-content = content.replace(old_plans, new_plans)
+content = content.replace(
+    '    entryToDelete?.let { entry ->',
+    dialog_code + '\n    entryToDelete?.let { entry ->'
+)
 
 with open('app/src/main/java/com/example/ui/FinancialScreen.kt', 'w') as f:
     f.write(content)
 
-print("Screen updated with Reports and Plans!")
