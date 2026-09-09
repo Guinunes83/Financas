@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
     enableEdgeToEdge()
     
     val database = AppDatabase.getDatabase(this)
-    val repository = FinancialRepository(database.financialEntryDao(), database.categoryDao())
+    val repository = FinancialRepository(database.financialEntryDao(), database.categoryDao(), database.planDao())
     val factory = FinancialViewModelFactory(repository)
     val viewModel = ViewModelProvider(this, factory)[FinancialViewModel::class.java]
 

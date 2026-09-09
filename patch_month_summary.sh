@@ -1,0 +1,1 @@
+sed -i 's/fun MonthSummary(totalIncome: Double, totalExpense: Double, totalScheduled: Double)/fun MonthSummary(totalIncome: Double, totalExpense: Double, totalScheduledExpense: Double, totalScheduledIncome: Double)/' app/src/main/java/com/example/ui/FinancialScreen.kt

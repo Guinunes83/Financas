@@ -1,4 +1,12 @@
-package com.example.ui
+import re
+
+with open('app/src/main/java/com/example/ui/AddEditEntryDialog.kt', 'r') as f:
+    content = f.read()
+
+# Let's write the whole file since we need to inject uiState.entries and current month balance logic.
+# But actually, I'd rather just replace the function body.
+
+new_file = """package com.example.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.imePadding
@@ -433,3 +441,7 @@ fun AddEditEntryDialog(
         }
     }
 }
+"""
+
+with open('app/src/main/java/com/example/ui/AddEditEntryDialog.kt', 'w') as f:
+    f.write(new_file)

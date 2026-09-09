@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 import com.example.data.FinancialCategory
+import com.example.data.FinancialPlan
 import kotlinx.coroutines.flow.combine
 
 import com.example.data.EntryStatus
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.first
 data class FinancialUiState(
     val entries: List<FinancialEntry> = emptyList(),
     val categories: List<FinancialCategory> = emptyList(),
+    val plans: List<FinancialPlan> = emptyList(),
     val totalIncome: Double = 0.0,
     val totalExpense: Double = 0.0,
     val scheduledIncome: Double = 0.0,
@@ -70,22 +72,26 @@ class FinancialViewModel(private val repository: FinancialRepository) : ViewMode
 
     val uiState: StateFlow<FinancialUiState> = combine(
         repository.allEntries,
-        repository.allCategories
-    ) { entries, categories ->
+        repository.allCategories,
+        repository.allPlans
+    ) { entries, categories, plans ->
         val income = entries.filter { it.type == EntryType.INCOME }.sumOf { it.amount }
         val expense = entries.filter { it.type == EntryType.EXPENSE && it.status == EntryStatus.COMPLETED }.sumOf { it.amount }
         
         val scheduledIncome = entries.filter { it.type == EntryType.INCOME && it.status == EntryStatus.PENDING }.sumOf { it.amount }
         val scheduledExpense = entries.filter { it.type == EntryType.EXPENSE && it.status == EntryStatus.PENDING }.sumOf { it.amount }
         
+        val plansSaved = entries.filter { it.type == EntryType.PLAN }.sumOf { it.amount }
+        
         FinancialUiState(
             entries = entries,
             categories = categories,
+            plans = plans,
             totalIncome = income,
             totalExpense = expense,
             scheduledIncome = scheduledIncome,
             scheduledExpense = scheduledExpense,
-            balance = income - expense
+            balance = income - expense - plansSaved
         )
     }.stateIn(
         scope = viewModelScope,
@@ -148,6 +154,19 @@ class FinancialViewModel(private val repository: FinancialRepository) : ViewMode
         }
     }
     
+    
+    fun insertPlan(plan: FinancialPlan) = viewModelScope.launch {
+        repository.insertPlan(plan)
+    }
+
+    fun updatePlan(plan: FinancialPlan) = viewModelScope.launch {
+        repository.updatePlan(plan)
+    }
+
+    fun deletePlan(plan: FinancialPlan) = viewModelScope.launch {
+        repository.deletePlan(plan)
+    }
+
     fun insertCategory(category: FinancialCategory) = viewModelScope.launch {
         repository.insertCategory(category)
     }

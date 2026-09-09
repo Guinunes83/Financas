@@ -204,7 +204,10 @@ fun FinancialScreen(
                         LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
                             groupedEntries.forEach { (monthString, entriesForMonth) ->
                                 item(key = "header_$monthString") {
-                                    MonthSeparator(monthString)
+                                    val monthIncome = entriesForMonth.filter { it.type == EntryType.INCOME && it.status == com.example.data.EntryStatus.COMPLETED }.sumOf { it.amount }
+                                    val monthExpenseCompleted = entriesForMonth.filter { it.type == EntryType.EXPENSE && it.status == com.example.data.EntryStatus.COMPLETED }.sumOf { it.amount }
+                                    val netTotal = monthIncome - monthExpenseCompleted
+                                    MonthSeparator(monthString, netTotal)
                                 }
                                 items(entriesForMonth.sortedBy { it.dateMillis }, key = { it.id }) { entry ->
                                     SpreadsheetRow(
@@ -215,20 +218,30 @@ fun FinancialScreen(
                                     )
                                 }
                                 item(key = "footer_$monthString") {
-                                    val monthIncome = entriesForMonth.filter { it.type == EntryType.INCOME }.sumOf { it.amount }
+                                    val monthIncome = entriesForMonth.filter { it.type == EntryType.INCOME && it.status == com.example.data.EntryStatus.COMPLETED }.sumOf { it.amount }
+                                    val monthScheduledIncome = entriesForMonth.filter { it.type == EntryType.INCOME && it.status == com.example.data.EntryStatus.PENDING }.sumOf { it.amount }
                                     val monthExpenseCompleted = entriesForMonth.filter { it.type == EntryType.EXPENSE && it.status == com.example.data.EntryStatus.COMPLETED }.sumOf { it.amount }
                                     val monthExpensePending = entriesForMonth.filter { it.type == EntryType.EXPENSE && it.status == com.example.data.EntryStatus.PENDING }.sumOf { it.amount }
                                     
                                     MonthSummary(
                                         totalIncome = monthIncome,
                                         totalExpense = monthExpenseCompleted,
-                                        totalScheduled = monthExpensePending
+                                        totalScheduledExpense = monthExpensePending,
+                                        totalScheduledIncome = monthScheduledIncome
                                     )
                                 }
                             }
                         }
                     }
                 }
+            }
+        } else if (currentTab == "Relatórios") {
+            Box(modifier = Modifier.padding(innerPadding)) {
+                ReportsScreen(uiState)
+            }
+        } else if (currentTab == "Planos") {
+            Box(modifier = Modifier.padding(innerPadding)) {
+                PlansScreen(viewModel, uiState)
             }
         } else if (currentTab == "Ajustes") {
             Box(modifier = Modifier.padding(innerPadding)) {
@@ -245,6 +258,8 @@ fun FinancialScreen(
         AddEditEntryDialog(
             entry = entryToEdit,
             categories = uiState.categories,
+            plans = uiState.plans,
+            entries = uiState.entries,
             onDismiss = {
                 showAddDialog = false
                 entryToEdit = null
@@ -380,9 +395,7 @@ fun SpreadsheetRow(
                 modifier = Modifier.weight(2.5f),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                color = MaterialTheme.colorScheme.onSurface
             )
             Box(
                 modifier = Modifier.weight(2f),
@@ -527,16 +540,16 @@ fun SpreadsheetRow(
     }
 }
 
+
 fun formatCurrency(amount: Double): String {
-    val format = NumberFormat.getCurrencyInstance(Locale("pt", "BR"))
+    val format = java.text.NumberFormat.getCurrencyInstance(java.util.Locale("pt", "BR"))
     return format.format(amount)
 }
 
 @Composable
-fun BottomNavButton(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+fun BottomNavButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
     val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-    val bgColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent
-
+    val bgColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else androidx.compose.ui.graphics.Color.Transparent
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.clickable(onClick = onClick).padding(4.dp)
@@ -560,7 +573,7 @@ fun BottomNavButton(icon: ImageVector, label: String, selected: Boolean, onClick
 }
 
 @Composable
-fun MonthSeparator(month: String) {
+fun MonthSeparator(month: String, netTotal: Double? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -579,11 +592,21 @@ fun MonthSeparator(month: String) {
             color = MaterialTheme.colorScheme.primary,
             thickness = 1.dp
         )
+        if (netTotal != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            val isPositive = netTotal >= 0
+            Text(
+                text = formatCurrency(netTotal),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (isPositive) GeometricIncome else GeometricExpense
+            )
+        }
     }
 }
 
 @Composable
-fun MonthSummary(totalIncome: Double, totalExpense: Double, totalScheduled: Double) {
+fun MonthSummary(totalIncome: Double, totalExpense: Double, totalScheduledExpense: Double, totalScheduledIncome: Double) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -595,6 +618,44 @@ fun MonthSummary(totalIncome: Double, totalExpense: Double, totalScheduled: Doub
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "TOTAL PROGRAMADO GANHOS",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = formatCurrency(totalScheduledIncome),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = GeometricIncome.copy(alpha = 0.7f)
+            )
+        }
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "TOTAL PROGRAMADO GASTOS",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = formatCurrency(totalScheduledExpense),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = GeometricExpense.copy(alpha = 0.7f)
+            )
+        }
+        
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -630,25 +691,6 @@ fun MonthSummary(totalIncome: Double, totalExpense: Double, totalScheduled: Doub
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = GeometricIncome
-            )
-        }
-        
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "TOTAL PROGRAMADO MÊS",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = formatCurrency(totalScheduled),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
         }
     }

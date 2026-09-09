@@ -1,5 +1,5 @@
 {
-  "name": "Elora Finanças",
+  "name": "Finanças",
   "description": "App para controle financeiro de despesas e gastos mensais, com layout de planilha.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

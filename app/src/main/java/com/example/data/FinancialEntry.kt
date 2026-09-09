@@ -4,7 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 enum class EntryType {
-    INCOME, EXPENSE
+    INCOME, EXPENSE, PLAN
 }
 
 enum class RecurrenceType(val displayName: String) {
@@ -29,5 +29,6 @@ data class FinancialEntry(
     val recurrenceType: RecurrenceType = RecurrenceType.UNITARIO,
     val installmentCount: Int? = null,
     val status: EntryStatus = EntryStatus.COMPLETED,
-    val recurrenceId: String? = null
+    val recurrenceId: String? = null,
+    val planId: Int? = null
 )
