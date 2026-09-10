@@ -1,4 +1,4 @@
-package com.example.ui.theme
+new_content = """package com.example.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -46,3 +46,7 @@ fun MyApplicationTheme(
         content = content
     )
 }
+"""
+
+with open('app/src/main/java/com/example/ui/theme/Theme.kt', 'w') as f:
+    f.write(new_content)

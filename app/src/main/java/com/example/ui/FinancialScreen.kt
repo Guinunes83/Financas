@@ -160,9 +160,11 @@ fun FinancialScreen(
                         )
                         .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                 ) {
-                    SpreadsheetHeader()
-                    
-                    val filteredEntries = if (searchQuery.isNotBlank()) {
+                    MaterialTheme(colorScheme = com.example.ui.theme.LightColorScheme) {
+                        Column {
+                            SpreadsheetHeader()
+                            
+                            val filteredEntries = if (searchQuery.isNotBlank()) {
                         uiState.entries.filter { 
                             it.name.contains(searchQuery, ignoreCase = true) || 
                             it.category.contains(searchQuery, ignoreCase = true) 
@@ -232,6 +234,8 @@ fun FinancialScreen(
                                     )
                                 }
                             }
+                        }
+                    }
                         }
                     }
                 }
@@ -316,7 +320,7 @@ fun FinancialScreen(
                     Text("Apenas este")
                 }
             },
-            containerColor = Color.White
+            
         )
     }
 
@@ -342,7 +346,7 @@ fun FinancialScreen(
                         Text("Este e os próximos")
                     }
                 },
-                containerColor = Color.White
+                
             )
         } else {
             AlertDialog(
@@ -362,7 +366,7 @@ fun FinancialScreen(
                         Text("Cancelar")
                     }
                 },
-                containerColor = Color.White
+                
             )
         }
     }
